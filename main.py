@@ -1,3 +1,23 @@
+import postgresql
+
+# Create connection to database
+db = postgresql.open(
+    user = 'postgres',
+    password = 'Pielover1339',
+    host = '127.0.0.1',
+    port = '5432',
+    database = 'postgres'
+)
+
+# Run sql file to initialize database
+initializeFile = open("sdap.sql")
+for line in initializeFile:
+    db.query(line)
+
+# Getting data types for struct
+test = db.query("SELECT column_name, data_type FROM information_schema.COLUMNS WHERE TABLE_NAME = 'sales';")
+print(test)
+
 inputType = input("Please enter the name of the file which you would like to read or enter nothing to enter the variables inline: ")
 selectAttributes = ""
 groupingVarCount = ""
@@ -5,7 +25,7 @@ groupingAttributes = ""
 fVect = ""
 predicates = ""
 havingCondition = ""
-MF-Struct = {
+MF_Struct = {
     'columns': {}
 }
 if inputType != "":
@@ -68,6 +88,8 @@ aggregateList = ['sum', 'avg', 'min', 'max', 'count']
 for attribute in selectAttributes.split(','):
     if len(attribute.split('_')) > 1:
         if attribute.split('_')[1] in aggregateList:
-            MF-Struct['columns'][attribute] = 'int'
+            MF_Struct['columns'][attribute] = 'int'
     else:
-        MF-Struct['columns'][attribute] = #insert attribute type from call to stats table
+        MF_Struct['columns'][attribute] = '' #insert attribute type from call to stats table
+
+db.close()

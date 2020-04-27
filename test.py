@@ -1,7 +1,6 @@
 import postgresql
 from databaseConfig import dbConfig
 
-# Create connection to database
 db = postgresql.open(
     user = dbConfig["user"],
     password = dbConfig["password"],
@@ -86,30 +85,38 @@ else:
     print("predicates:",predicates)
     print("havingCondition:",havingCondition)
 
-algorithmFile = open("algorithm.py", "w")
-algorithmFile.write("import postgresql\nfrom databaseConfig import dbConfig\n")
-algorithmFile.write("MF_Struct = {'columns': {}}\n")
-algorithmFile.write(f"for attribute in '{(groupingAttributes + fVect)}'.split(','):\n")
-algorithmFile.write("   if len(attribute.split('_')) > 1:\n")
-algorithmFile.write("       if attribute.split('_')[1] in ['sum', 'avg', 'min', 'max', 'count']:\n")
-algorithmFile.write("           MF_Struct['columns'][attribute] = 'int'\n")
-algorithmFile.write("   if attribute.split('_')[0] in ['sum', 'avg', 'min', 'max', 'count']:\n")
-algorithmFile.write("       MF_Struct['columns'][attribute] = 'int'\n)
-algorithmFile.write("   else:\n")
-algorithmFile.write("       if attribute == 'cust' or attribute == 'prod' or attribute == 'state':\n")
-algorithmFile.write("           MF_Struct['columns'][attribute] = 'str'\n")
-algorithmFile.write("       if attribute == 'day' or attribute == 'month' or attribute == 'year' or attribute == 'quant':\n")
-algorithmFile.write("           MF_Struct['columns'][attribute] = 'int'\n")
-algorithmFile.write("print(MF_Struct)\n")
-algorithmFile.write("db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)\n")
-algorithmFile.write("""print(db.query("SELECT column_name, data_type FROM information_schema.COLUMNS WHERE TABLE_NAME = 'sales';"))\n""")
-algorithmFile.write("db.close()")
+MF_Struct = {'columns': {}}
+for attribute in (groupingAttributes + ',' + fVect).split(','):
+    if len(attribute.split('_')) > 1:
+        if attribute.split('_')[1] in ['sum', 'avg', 'min', 'max', 'count']:
+            MF_Struct['columns'][attribute] = 'int'
+        if attribute.split('_')[0] in ['sum', 'avg', 'min', 'max', 'count']:
+            MF_Struct['columns'][attribute] = 'int'
+    else:
+        if attribute == 'cust' or attribute == 'prod' or attribute == 'state':
+            MF_Struct['columns'][attribute] = 'str'
+        if attribute == 'day' or attribute == 'month' or attribute == 'year' or attribute == 'quant':
+            MF_Struct['columns'][attribute] = 'int'
+db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)
 
-# Row iterator
-# query = db.prepare("SELECT * FROM sales;")
-# for row in query:
-#     print(row['cust'], row)
+query = db.prepare("SELECT * FROM sales;")
+for row in query:
+    # print(row)
+    key = ''
+    value = {}
+    # i = 0
+    # while i < groupingVarCount:
+    for attr in groupingAttributes.split(','):
+        key += row[attr]
+    if key not in MF_Struct.keys():
+        for groupAttr in groupingAttributes.split(','):
+            if MF_Struct['columns'][groupAttr] == 'int':
+                value[groupAttr] = 0
+            if MF_Struct['columns'][groupAttr] == 'str':
+                value[groupAttr] = ''
+        for fFectAttrs in fVect.split(','):
+            value[fFectAttrs] = 0
+        MF_Struct[key] = value
 
-# algorithmFile.write(f"MF_Struct: {MF_Struct}")
-# db.query("SELECT column_name, data_type FROM information_schema.COLUMNS WHERE TABLE_NAME = 'sales';")
-db.close()
+print(MF_Struct)
+

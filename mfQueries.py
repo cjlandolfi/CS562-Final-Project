@@ -48,7 +48,7 @@ if inputType != "":
             i += 1
         elif(content[i] == "SELECT CONDITION-VECT([σ]):"):
             i += 1
-            predicates = content[i].replace(" ", "")
+            predicates = content[i]
             i += 1
         elif(content[i] == "HAVING_CONDITION(G):"): 
             i += 1     
@@ -62,7 +62,7 @@ if inputType != "":
     groupingVarCount = groupingVarCount.replace(" ", "")
     groupingAttributes = groupingAttributes.replace(" ", "")
     fVect = fVect.replace(" ", "")
-    predicates = predicates.replace(" ", "") 
+    predicates = predicates
     havingCondition = havingCondition
     print("selectAttributes:",selectAttributes)
     print("groupingVarCount:",groupingVarCount)
@@ -70,14 +70,13 @@ if inputType != "":
     print("fVect:",fVect)
     print("predicates:",predicates)
     print("havingCondition:",havingCondition)
-
 else:
     #read inline
     selectAttributes = input("Please input the select attributes seperated by a comma: ").replace(" ", "")
     groupingVarCount = input("Please input the number of grouping variables: ").replace(" ", "")
     groupingAttributes = input("Please input the grouping attribute(s). If more than one, seperate with commas: ").replace(" ", "")
     fVect = input("Please input the list of aggregate functions seperated by a comma: ").replace(" ", "")
-    predicates = input("Please input the predicates that define the range of the grouping variables seperated by a comma: ").replace(" ", "")
+    predicates = input("Please input the predicates that define the range of the grouping variables seperated by a comma: ")
     havingCondition = input("Please input the having condition: ")
     print("selectAttributes:",selectAttributes)
     print("groupingVarCount:",groupingVarCount)
@@ -86,36 +85,23 @@ else:
     print("predicates:",predicates)
     print("havingCondition:",havingCondition)
 
-MF_Struct = {'columns': {}}
-for attribute in (groupingAttributes + ',' + fVect).split(','):
-    if len(attribute.split('_')) > 1:
-        if attribute.split('_')[1] in ['sum', 'avg', 'min', 'max', 'count']:
-            MF_Struct['columns'][attribute] = 'int'
-        if attribute.split('_')[0] in ['sum', 'avg', 'min', 'max', 'count']:
-            MF_Struct['columns'][attribute] = 'int'
-    else:
-        if attribute == 'cust' or attribute == 'prod' or attribute == 'state':
-            MF_Struct['columns'][attribute] = 'str'
-        if attribute == 'day' or attribute == 'month' or attribute == 'year' or attribute == 'quant':
-            MF_Struct['columns'][attribute] = 'int'
+MF_Struct = {}
 
 db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)
 query = db.prepare("SELECT * FROM sales;")
-
 predicates = predicates.split(',')
+print('before',predicates)
 pList = []
 # We are using the grouping variables as indexes, so only numbers work
 for i in predicates:
-    pList.append(i.split('.'))
-
+    pList.append(i.split(' '))
+print('pList', pList)
 for i in range(int(groupingVarCount)+1):
     # Initial pass - Initialization
     if i == 0:
         for row in query:
             key = ''
             value = {}
-            # i = 0
-            # while i < groupingVarCount:
             for attr in groupingAttributes.split(','):
                 key += f'{str(row[attr])},'
             key = key[:-1]
@@ -124,10 +110,6 @@ for i in range(int(groupingVarCount)+1):
                     colVal = row[groupAttr]
                     if colVal:
                         value[groupAttr] = colVal
-                    # if MF_Struct['columns'][groupAttr] == 'int':
-                    #     value[groupAttr] = 0
-                    # if MF_Struct['columns'][groupAttr] == 'str':
-                    #     value[groupAttr] = ''
                 # Can be string?
                 for fVectAttr in fVect.split(','):
                     if (fVectAttr.split('_')[1] == 'avg'):
@@ -147,7 +129,6 @@ for i in range(int(groupingVarCount)+1):
             groupVar = aggList[0]
             aggFunc = aggList[1]
             aggCol = aggList[2]
-            predList = [] #all predicates that apply to current groupVar
             # ['sum', 'avg', 'min', 'max', 'count']
             if i == int(groupVar):
                 for row in query:
@@ -157,174 +138,99 @@ for i in range(int(groupingVarCount)+1):
                     key = key[:-1]
                     if aggFunc == 'sum':
                         #check if row meets predicate requirements
-                        if pList[i-1][0] == str(i): # a string that corresponds to the grouping variable,
-                            sum = 0
-                            pred = pList[i-1][1]
-                            if(len(pred.split('=')) != 1): # =
-                                pred = pred.split('=')
-                                if str(row[pred[0]]) == pred[1].replace("'", ''):
-                                    sum += int(row[aggCol])
-                            elif(len(pred.split('>')) != 1): # >
-                                pred = pred.split('>')
-                                if int(row[pred[0]]) > int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
-                            elif(len(pred.split('<')) != 1): # <
-                                pred = pred.split('<')
-                                if int(row[pred[0]]) < int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
-                            elif(len(pred.split('<=')) != 1): # <=
-                                pred = pred.split('<=')
-                                if int(row[pred[0]]) <= int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
-                            elif(len(pred.split('>=')) != 1): # >=
-                                pred = pred.split('>=')
-                                if int(row[pred[0]]) >= int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
+                        evalString = predicates[i-1]
+                        for string in pList[i-1]:   
+                            if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
+                                rowVal = row[string.split('.')[1]]
+                                try:
+                                    int(rowVal)
+                                    evalString = evalString.replace(string, str(rowVal))
+                                except:
+                                    evalString = evalString.replace(string, f"'{rowVal}'")
+                        if eval(evalString.replace('=', '==')):
+                            sum = int(row[aggCol])
                             MF_Struct[key][aggregate] += sum
-                            sum = 0
                     elif aggFunc == 'avg':
                         # avg = {sum: 0, count: 0, avg: 0}
                         #check if row meets predicate requirements
-                        if pList[i-1][0] == str(i): # a string that corresponds to the grouping variable,
-                            sum = MF_Struct[key][aggregate]['sum']
-                            count = MF_Struct[key][aggregate]['count']
-                            pred = pList[i-1][1]
-                            if(len(pred.split('=')) != 1): # =
-                                pred = pred.split('=')
-                                if str(row[pred[0]]) == pred[1].replace("'", ''):
-                                    sum += int(row[aggCol])
-                                    count += 1
-                            elif(len(pred.split('>')) != 1): # >
-                                pred = pred.split('>')
-                                if int(row[pred[0]]) > int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
-                                    count += 1
-                            elif(len(pred.split('<')) != 1): # <
-                                pred = pred.split('<')
-                                if int(row[pred[0]]) < int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
-                                    count += 1
-                            elif(len(pred.split('<=')) != 1): # <=
-                                pred = pred.split('<=')
-                                if int(row[pred[0]]) <= int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
-                                    count += 1
-                            elif(len(pred.split('>=')) != 1): # >=
-                                pred = pred.split('>=')
-                                if int(row[pred[0]]) >= int(pred[1].replace("'", '')):
-                                    sum += int(row[aggCol])
-                                    count += 1
-                            if(count != 0):
+                        sum = MF_Struct[key][aggregate]['sum']
+                        count = MF_Struct[key][aggregate]['count']
+                        evalString = predicates[i-1]
+                        for string in pList[i-1]:   
+                            if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
+                                rowVal = row[string.split('.')[1]]
+                                try:
+                                    int(rowVal)
+                                    evalString = evalString.replace(string, str(rowVal))
+                                except:
+                                    evalString = evalString.replace(string, f"'{rowVal}'")
+                        if eval(evalString.replace('=', '==')):
+                            sum += int(row[aggCol])
+                            count += 1
+                            if count != 0:
                                 MF_Struct[key][aggregate] = {'sum': sum, 'count': count, 'avg': (sum/count)}
                     elif aggFunc == 'min':
-                        #check if row meets predicate requirements AND is less than min
-                        if pList[i-1][0] == str(i): # a string that corresponds to the grouping variable,
-                            pred = pList[i-1][1]
-                            min = MF_Struct[key][aggregate]
-                            if(len(pred.split('=')) != 1): # =
-                                pred = pred.split('=')
-                                if str(row[pred[0]]) == pred[1].replace("'", '') and (int(row[aggCol]) < min):
-                                    min = int(row[aggCol])
-                            elif(len(pred.split('>')) != 1): # >
-                                pred = pred.split('>')
-                                if int(row[pred[0]]) > int(pred[1].replace("'", '')) and (int(row[aggCol]) < min):
-                                    min = int(row[aggCol])
-                            elif(len(pred.split('<')) != 1): # <
-                                pred = pred.split('<')
-                                if int(row[pred[0]]) < int(pred[1].replace("'", '')) and (int(row[aggCol]) < min):
-                                    min = int(row[aggCol])
-                            elif(len(pred.split('<=')) != 1): # <=
-                                pred = pred.split('<=')
-                                if int(row[pred[0]]) <= int(pred[1].replace("'", '')) and (int(row[aggCol]) < min):
-                                    min = int(row[aggCol])
-                            elif(len(pred.split('>=')) != 1): # >=
-                                pred = pred.split('>=')
-                                if int(row[pred[0]]) >= int(pred[1].replace("'", '')) and (int(row[aggCol]) < min):
-                                    min = int(row[aggCol])
-                            MF_Struct[key][aggregate] = min
+                        #check if row meets predicate requirements
+                        evalString = predicates[i-1]
+                        for string in pList[i-1]:   
+                            if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
+                                rowVal = row[string.split('.')[1]]
+                                try:
+                                    int(rowVal)
+                                    evalString = evalString.replace(string, str(rowVal))
+                                except:
+                                    evalString = evalString.replace(string, f"'{rowVal}'")
+                        if eval(evalString.replace('=', '==')):
+                            min = int(MF_Struct[key][aggregate])
+                            if int(row[aggCol]) < min:
+                                MF_Struct[key][aggregate] = row[aggCol]
                     elif aggFunc == 'max':
-                        #check if row meets predicate requirements AND is greater than max
-                        if pList[i-1][0] == str(i): # a string that corresponds to the grouping variable,
-                            pred = pList[i-1][1]
-                            max = MF_Struct[key][aggregate]
-                            if(len(pred.split('=')) != 1): # =
-                                pred = pred.split('=')
-                                if str(row[pred[0]]) == pred[1].replace("'", '') and (int(row[aggCol]) > max):
-                                    max = int(row[aggCol])
-                            elif(len(pred.split('>')) != 1): # >
-                                pred = pred.split('>')
-                                if int(row[pred[0]]) > int(pred[1].replace("'", '')) and (int(row[aggCol]) > max):
-                                    max = int(row[aggCol])
-                            elif(len(pred.split('<')) != 1): # <
-                                pred = pred.split('<')
-                                if int(row[pred[0]]) < int(pred[1].replace("'", '')) and (int(row[aggCol]) > max):
-                                    max = int(row[aggCol])
-                            elif(len(pred.split('<=')) != 1): # <=
-                                pred = pred.split('<=')
-                                if int(row[pred[0]]) <= int(pred[1].replace("'", '')) and (int(row[aggCol]) > max):
-                                    max = int(row[aggCol])
-                            elif(len(pred.split('>=')) != 1): # >=
-                                pred = pred.split('>=')
-                                if int(row[pred[0]]) >= int(pred[1].replace("'", '')) and (int(row[aggCol]) > max):
-                                    max = int(row[aggCol])
-                            MF_Struct[key][aggregate] = max
+                        #check if row meets predicate requirements
+                        evalString = predicates[i-1]
+                        for string in pList[i-1]:   
+                            if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
+                                rowVal = row[string.split('.')[1]]
+                                try:
+                                    int(rowVal)
+                                    evalString = evalString.replace(string, str(rowVal))
+                                except:
+                                    evalString = evalString.replace(string, f"'{rowVal}'")
+                        if eval(evalString.replace('=', '==')):
+                            max = int(MF_Struct[key][aggregate])
+                            if int(row[aggCol]) > max:
+                                MF_Struct[key][aggregate] = row[aggCol]
                     elif aggFunc == 'count':
                         #check if row meets predicate requirements
-                        if pList[i-1][0] == str(i): # a string that corresponds to the grouping variable,
-                            pred = pList[i-1][1]
-                            count = MF_Struct[key][aggregate]
-                            if(len(pred.split('=')) != 1): # =
-                                pred = pred.split('=')
-                                if str(row[pred[0]]) == pred[1].replace("'", ''):
-                                    count += 1
-                            elif(len(pred.split('>')) != 1): # >
-                                pred = pred.split('>')
-                                if int(row[pred[0]]) > int(pred[1].replace("'", '')):
-                                    count += 1
-                            elif(len(pred.split('<')) != 1): # <
-                                pred = pred.split('<')
-                                if int(row[pred[0]]) < int(pred[1].replace("'", '')):
-                                    count += 1
-                            elif(len(pred.split('<=')) != 1): # <=
-                                pred = pred.split('<=')
-                                if int(row[pred[0]]) <= int(pred[1].replace("'", '')):
-                                    count += 1
-                            elif(len(pred.split('>=')) != 1): # >=
-                                pred = pred.split('>=')
-                                if int(row[pred[0]]) >= int(pred[1].replace("'", '')):
-                                    count += 1
-                            MF_Struct[key][aggregate] = count
-                    
+                        evalString = predicates[i-1]
+                        for string in pList[i-1]:   
+                            if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
+                                rowVal = row[string.split('.')[1]]
+                                try:
+                                    int(rowVal)
+                                    evalString = evalString.replace(string, str(rowVal))
+                                except:
+                                    evalString = evalString.replace(string, f"'{rowVal}'")
+                        if eval(evalString.replace('=', '==')):
+                            MF_Struct[key][aggregate] += 1                  
 print(MF_Struct) # Evaluated struct
-
 output = PrettyTable()
 output.field_names = selectAttributes.split(',')
 for row in MF_Struct:
-    if row != 'columns':
-        evalString = ''
-        if havingCondition != '':
-            for string in havingCondition.split(' '): 
-                if string not in ['>', '<', '==', '<=', '>=', 'and', 'or', 'not', '*', '/', '+', '-']: 
-                    try: #catches all ints in having clause and adds them to eval string
-                        int(string)
-                        evalString += string
-                    except: #if it is not an int, it is a variable in the MF_Struct
-                        if len(string.split('_')) > 1 and string.split('_')[1] == 'avg':
-                            evalString += str(MF_Struct[row][string]['avg'])
-                        else:
-                            evalString += str(MF_Struct[row][string])
-                else:
-                    evalString += f' {string} '
-            if eval(evalString):
-                row_info = []
-                for val in selectAttributes.split(','):
-                    if len(val.split('_')) > 1 and val.split('_')[1] == 'avg':
-                        row_info += [str(MF_Struct[row][val]['avg'])]
+    evalString = ''
+    if havingCondition != '':
+        for string in havingCondition.split(' '): 
+            if string not in ['>', '<', '==', '<=', '>=', 'and', 'or', 'not', '*', '/', '+', '-']: 
+                try: #catches all ints in having clause and adds them to eval string
+                    int(string)
+                    evalString += string
+                except: #if it is not an int, it is a variable in the MF_Struct
+                    if len(string.split('_')) > 1 and string.split('_')[1] == 'avg':
+                        evalString += str(MF_Struct[row][string]['avg'])
                     else:
-                        row_info += [str(MF_Struct[row][val])]
-                output.add_row(row_info)
-            evalString = '' #clear eval string after execution
-        else:
+                        evalString += str(MF_Struct[row][string])
+            else:
+                evalString += f' {string} '
+        if eval(evalString.replace('=', '==')):
             row_info = []
             for val in selectAttributes.split(','):
                 if len(val.split('_')) > 1 and val.split('_')[1] == 'avg':
@@ -332,14 +238,13 @@ for row in MF_Struct:
                 else:
                     row_info += [str(MF_Struct[row][val])]
             output.add_row(row_info)
-
-        
+        evalString = '' #clear eval string after execution
+    else:
+        row_info = []
+        for val in selectAttributes.split(','):
+            if len(val.split('_')) > 1 and val.split('_')[1] == 'avg':
+                row_info += [str(MF_Struct[row][val]['avg'])]
+            else:
+                row_info += [str(MF_Struct[row][val])]
+        output.add_row(row_info)
 print(output) #Pretty table corresponding to evaluation of query
-
-#Does not do the following:
-#   take into account EMF query x.state = state etc.
-#   AND and OR in the predicates
-#TODO
-#   Presentation
-#   Write 5 test queries to run for presentation
-#   Make this all write to a file

@@ -104,12 +104,19 @@ algorithmFile.write("print(MF_Struct)\n")
 algorithmFile.write("db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)\n")
 algorithmFile.write("""print(db.query("SELECT column_name, data_type FROM information_schema.COLUMNS WHERE TABLE_NAME = 'sales';"))\n""")
 algorithmFile.write("db.close()")
-
-# Row iterator
-# query = db.prepare("SELECT * FROM sales;")
-# for row in query:
-#     print(row['cust'], row)
-
-# algorithmFile.write(f"MF_Struct: {MF_Struct}")
-# db.query("SELECT column_name, data_type FROM information_schema.COLUMNS WHERE TABLE_NAME = 'sales';")
 db.close()
+
+#TODO
+#   Presentation
+#   Write 5 test queries to run for presentation
+#   Make this all write to a file
+#   Take out columns from the MF struct?
+
+### Keep sqlQueries, mfQueries, and emfQueries separate but all write to 'algorithm.py' ###
+
+#5 Test queries
+#   1 Simple query, no grouping variables
+#   1 MF Query, 1 grouping variable
+#   1 MF Query, 2 grouping variables
+#   1 EMF Query, 1 grouping variable
+#   1 EMF Query, 2 grouping variables

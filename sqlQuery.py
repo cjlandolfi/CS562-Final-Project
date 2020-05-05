@@ -57,7 +57,6 @@ if inputType != "":
         else:
             predicates += "," + content[i]
             i += 1
-
     selectAttributes = selectAttributes.replace(" ", "")
     groupingVarCount = groupingVarCount.replace(" ", "")
     groupingAttributes = groupingAttributes.replace(" ", "")
@@ -70,7 +69,6 @@ if inputType != "":
     print("fVect:",fVect)
     print("predicates:",predicates)
     print("havingCondition:",havingCondition)
-
 else:
     #read inline
     selectAttributes = input("Please input the select attributes seperated by a comma: ").replace(" ", "")
@@ -86,22 +84,10 @@ else:
     print("predicates:",predicates)
     print("havingCondition:",havingCondition)
 
-MF_Struct = {'columns': {}}
-for attribute in (groupingAttributes + ',' + fVect).split(','):
-    if len(attribute.split('_')) > 1:
-        if attribute.split('_')[1] in ['sum', 'avg', 'min', 'max', 'count']:
-            MF_Struct['columns'][attribute] = 'int'
-        if attribute.split('_')[0] in ['sum', 'avg', 'min', 'max', 'count']:
-            MF_Struct['columns'][attribute] = 'int'
-    else:
-        if attribute == 'cust' or attribute == 'prod' or attribute == 'state':
-            MF_Struct['columns'][attribute] = 'str'
-        if attribute == 'day' or attribute == 'month' or attribute == 'year' or attribute == 'quant':
-            MF_Struct['columns'][attribute] = 'int'
+MF_Struct = {}
 
 db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)
 query = db.prepare("SELECT * FROM sales;")
-
 # Initial pass - Initialization
 for row in query:
     key = ''
@@ -116,10 +102,6 @@ for row in query:
             colVal = row[groupAttr]
             if colVal:
                 value[groupAttr] = colVal
-            # if MF_Struct['columns'][groupAttr] == 'int':
-            #     value[groupAttr] = 0
-            # if MF_Struct['columns'][groupAttr] == 'str':
-            #     value[groupAttr] = ''
         # Can be string?
         for fVectAttr in fVect.split(','):
             tableCol = fVectAttr.split('_')[1]
@@ -149,35 +131,24 @@ for row in query:
                 if row[tableCol] > MF_Struct[key][fVectAttr]:
                     MF_Struct[key][fVectAttr] = int(row[tableCol])
 print(MF_Struct) # Initialized Struct
-
 output = PrettyTable()
 output.field_names = selectAttributes.split(',')
 for row in MF_Struct:
-    if row != 'columns':
-        evalString = ''
-        if havingCondition != '':
-            for string in havingCondition.split(' '): 
-                if string not in ['>', '<', '==', '<=', '>=', 'and', 'or', 'not', '*', '/', '+', '-']: 
-                    try: #catches all ints in having clause and adds them to eval string
-                        int(string)
-                        evalString += string
-                    except: #if it is not an int, it is a variable in the MF_Struct
-                        if len(string.split('_')) > 1 and string.split('_')[0] == 'avg':
-                            evalString += str(MF_Struct[row][string]['avg'])
-                        else:
-                            evalString += str(MF_Struct[row][string])
-                else:
-                    evalString += f' {string} '
-            if eval(evalString):
-                row_info = []
-                for val in selectAttributes.split(','):
-                    if len(val.split('_')) > 1 and val.split('_')[0] == 'avg':
-                        row_info += [str(MF_Struct[row][val]['avg'])]
+    evalString = ''
+    if havingCondition != '':
+        for string in havingCondition.split(' '): 
+            if string not in ['>', '<', '==', '<=', '>=', 'and', 'or', 'not', '*', '/', '+', '-']: 
+                try: #catches all ints in having clause and adds them to eval string
+                    int(string)
+                    evalString += string
+                except: #if it is not an int, it is a variable in the MF_Struct
+                    if len(string.split('_')) > 1 and string.split('_')[0] == 'avg':
+                        evalString += str(MF_Struct[row][string]['avg'])
                     else:
-                        row_info += [str(MF_Struct[row][val])]
-                output.add_row(row_info)
-            evalString = '' #clear eval string after execution
-        else:
+                        evalString += str(MF_Struct[row][string])
+            else:
+                evalString += f' {string} '
+        if eval(evalString.replace('=', '==')):
             row_info = []
             for val in selectAttributes.split(','):
                 if len(val.split('_')) > 1 and val.split('_')[0] == 'avg':
@@ -185,6 +156,13 @@ for row in MF_Struct:
                 else:
                     row_info += [str(MF_Struct[row][val])]
             output.add_row(row_info)
-
-        
+        evalString = '' #clear eval string after execution
+    else:
+        row_info = []
+        for val in selectAttributes.split(','):
+            if len(val.split('_')) > 1 and val.split('_')[0] == 'avg':
+                row_info += [str(MF_Struct[row][val]['avg'])] 
+            else:
+                row_info += [str(MF_Struct[row][val])]
+        output.add_row(row_info)      
 print(output) #Pretty table corresponding to evaluation of query

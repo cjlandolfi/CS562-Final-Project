@@ -1,5 +1,24 @@
+# Authors: Keith Morel and Chris Landolfi
+
+# Dependencies: Ensure sure that the py-postgresql, and PrettyTable modules are installed, the dbConfig dictionary in the 
+# databaseConfig.py file is updated with the credentials needed to connect to your database. A sql file to create the sales table
+# is also needed to run this program. This file must be named 'sdap.sql' and contain rows for the sales table as described in the
+# project document.
+
+# Starting the Program: Type 'python main.py' and the program will begin executing.
+
+# Running the Program: When the program is run, the terminal will prompt the user to input a file name or the phi operator variables
+# inline. The input will then be processed and will generate an algorithm corresponding to the type of query specified by the
+# user input.
+
+# Output: The program will output to a file called 'algorithm.py', which can be run without input to return a table of the output
+# for the query. The program will also add all rows from 'sdap.sql' into your database into the 'sales' table.
+
 import postgresql
 from databaseConfig import dbConfig
+from sqlQuery import sqlQuery
+from mfQueries import mfQuery
+from emfQueries import emfQuery
 
 # Create connection to database
 db = postgresql.open(
@@ -16,7 +35,7 @@ for line in initializeFile:
     db.query(line)
 
 # Receive Input
-inputType = input("Please enter the name of the file which you would like to read or enter nothing to enter the variables inline: ")
+inputType = input("Please enter the name of the file which you would like to read, or enter nothing to input the variables inline: ")
 selectAttributes = ""
 groupingVarCount = ""
 groupingAttributes = ""
@@ -48,7 +67,7 @@ if inputType != "":
             i += 1
         elif(content[i] == "SELECT CONDITION-VECT([σ]):"):
             i += 1
-            predicates = content[i].replace(" ", "")
+            predicates = content[i]
             i += 1
         elif(content[i] == "HAVING_CONDITION(G):"): 
             i += 1     
@@ -57,66 +76,54 @@ if inputType != "":
         else:
             predicates += "," + content[i]
             i += 1
-
+    #trim input of whitespace
     selectAttributes = selectAttributes.replace(" ", "")
     groupingVarCount = groupingVarCount.replace(" ", "")
     groupingAttributes = groupingAttributes.replace(" ", "")
     fVect = fVect.replace(" ", "")
-    predicates = predicates.replace(" ", "") 
-    havingCondition = havingCondition.replace(" ", "")
-    print("selectAttributes:",selectAttributes)
-    print("groupingVarCount:",groupingVarCount)
-    print("groupingAttributes:",groupingAttributes)
-    print("fVect:",fVect)
-    print("predicates:",predicates)
-    print("havingCondition:",havingCondition)
+    predicates = predicates #white space needed to evaluate each predicate statment 
+    havingCondition = havingCondition #white space needed to evaluate each having condition
 
 else:
     #read inline
     selectAttributes = input("Please input the select attributes seperated by a comma: ").replace(" ", "")
     groupingVarCount = input("Please input the number of grouping variables: ").replace(" ", "")
     groupingAttributes = input("Please input the grouping attribute(s). If more than one, seperate with commas: ").replace(" ", "")
-    fVect = input("Please input the list of aggregate functions seperated by a comma: ").replace(" ", "")
-    predicates = input("Please input the predicates that define the range of the grouping variables seperated by a comma: ").replace(" ", "")
-    havingCondition = input("Please input the having condition: ").replace(" ", "") 
-    print("selectAttributes:",selectAttributes)
-    print("groupingVarCount:",groupingVarCount)
-    print("groupingAttributes:",groupingAttributes)
-    print("fVect:",fVect)
-    print("predicates:",predicates)
-    print("havingCondition:",havingCondition)
+    fVect = input("Please input the list of aggregate functions for the query seperated by a comma: ").replace(" ", "")
+    predicates = input("Please input the predicates that define the range of the grouping variables seperated by a comma. Each predicate must have each element sperated by a space: ")
+    havingCondition = input("Please input the having condition with each element seperated by spaces, and the AND and OR written in lowercase: ")
 
-algorithmFile = open("algorithm.py", "w")
-algorithmFile.write("import postgresql\nfrom databaseConfig import dbConfig\n")
-algorithmFile.write("MF_Struct = {'columns': {}}\n")
-algorithmFile.write(f"for attribute in '{(groupingAttributes + fVect)}'.split(','):\n")
-algorithmFile.write("   if len(attribute.split('_')) > 1:\n")
-algorithmFile.write("       if attribute.split('_')[1] in ['sum', 'avg', 'min', 'max', 'count']:\n")
-algorithmFile.write("           MF_Struct['columns'][attribute] = 'int'\n")
-algorithmFile.write("   if attribute.split('_')[0] in ['sum', 'avg', 'min', 'max', 'count']:\n")
-algorithmFile.write("       MF_Struct['columns'][attribute] = 'int'\n")
-algorithmFile.write("   else:\n")
-algorithmFile.write("       if attribute == 'cust' or attribute == 'prod' or attribute == 'state':\n")
-algorithmFile.write("           MF_Struct['columns'][attribute] = 'str'\n")
-algorithmFile.write("       if attribute == 'day' or attribute == 'month' or attribute == 'year' or attribute == 'quant':\n")
-algorithmFile.write("           MF_Struct['columns'][attribute] = 'int'\n")
-algorithmFile.write("print(MF_Struct)\n")
-algorithmFile.write("db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)\n")
-algorithmFile.write("""print(db.query("SELECT column_name, data_type FROM information_schema.COLUMNS WHERE TABLE_NAME = 'sales';"))\n""")
-algorithmFile.write("db.close()")
+#initalizing algorithmFile with needed moduels, database connection, input variables, empty MF Struct
+with open('algorithm.py', 'w') as algorithmFile: # opens file to write algorithm to
+    algorithmFile.write("import postgresql\nfrom databaseConfig import dbConfig\nfrom prettytable import PrettyTable\n\n") # module imports
+    algorithmFile.write(f"""selectAttributes = "{selectAttributes}"\ngroupingVarCount = {groupingVarCount}\ngroupingAttributes = "{groupingAttributes}"\nfVect = "{fVect}"\npredicates = "{predicates}"\nhavingCondition = "{havingCondition}"\n""")
+    algorithmFile.write("MF_Struct = {}\n")
+    algorithmFile.write("db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)\n\n")
+    algorithmFile.write("query = db.prepare('SELECT * FROM sales;')\n")
+    mf = 1 #flag to tell if a query is an MF Query
+    if groupingVarCount == '0': #If no grouping variables, evaluate as a regular SQL Query
+        mf = 0 #set flag to 0 as the query is not an MF Query
+        algorithmFile.write("\n\n# Algorithm for basic SQL Query:\n")
+        algorithmFile.close() #close file before passing to sqlQuery function
+        sqlQuery() #calls sqlQuery function which will write the appropriate algorithm to the algorithm.py file
+    
+    for pred in predicates.split(','): #loop through the list of predicate statments to determine if the query is an MF or EMF Query
+        if(mf): #if the query has not been found to be a EMF or SQL Query, continue checking
+            for string in pred.split(' '): #for each element of the predicate statment,
+                if(string in groupingAttributes.split(',')): #if there is a grouping attribute in the predicate statment, the query is an EMF Query
+                    mf = 0 #Query is an EMF Query, update flag
+                    algorithmFile.write("\n\n# Algorithm for EMF Query:\n")
+                    algorithmFile.close()
+                    emfQuery() #calls emfQuery function to write the appropriate algorithm to the algorithm.py file
+                    break #if the query is an EMF Query, break out of the loop
+        else: #break out of the loop if the query was found to be an SQL or EMF Query
+            break 
+    if(mf): # If query isn't a basic SQL query or an EMF query, evaluate as an MF Query
+        algorithmFile.write("\n\n# Algorithm for MF Query:\n")
+        algorithmFile.close()
+        mfQuery() #calls mfQuery function to write the appropriate algorithm to the algorithm.py file
 db.close()
 
 #TODO
 #   Presentation
-#   Write 5 test queries to run for presentation
-#   Make this all write to a file
-#   Take out columns from the MF struct?
-
-### Keep sqlQueries, mfQueries, and emfQueries separate but all write to 'algorithm.py' ###
-
-#5 Test queries
-#   1 Simple query, no grouping variables
-#   1 MF Query, 1 grouping variable
-#   1 MF Query, 2 grouping variables
-#   1 EMF Query, 1 grouping variable
-#   1 EMF Query, 2 grouping variables
+#   Test

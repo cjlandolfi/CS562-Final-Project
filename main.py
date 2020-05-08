@@ -29,7 +29,7 @@ db = postgresql.open(
     database = dbConfig["database"],
 )
 
-# Run sql file to initialize database
+# Run sql file to initialize database with sales table defined in sdap.sql
 initializeFile = open("sdap.sql")
 for line in initializeFile:
     db.query(line)
@@ -93,13 +93,15 @@ else:
     predicates = input("Please input the predicates that define the range of the grouping variables seperated by a comma. Each predicate must have each element sperated by a space: ")
     havingCondition = input("Please input the having condition with each element seperated by spaces, and the AND and OR written in lowercase: ")
 
-#initalizing algorithmFile with needed moduels, database connection, input variables, empty MF Struct
+#initalizing algorithmFile with needed modules, database connection, input variables, and empty MF Struct
 with open('algorithm.py', 'w') as algorithmFile: # opens file to write algorithm to
-    algorithmFile.write("import postgresql\nfrom databaseConfig import dbConfig\nfrom prettytable import PrettyTable\n\n") # module imports
-    algorithmFile.write(f"""selectAttributes = "{selectAttributes}"\ngroupingVarCount = {groupingVarCount}\ngroupingAttributes = "{groupingAttributes}"\nfVect = "{fVect}"\npredicates = "{predicates}"\nhavingCondition = "{havingCondition}"\n""")
-    algorithmFile.write("MF_Struct = {}\n")
+    algorithmFile.write("import postgresql\nfrom databaseConfig import dbConfig\nfrom prettytable import PrettyTable\n\n") #import modules
+    algorithmFile.write(f"""selectAttributes = "{selectAttributes}"\ngroupingVarCount = {groupingVarCount}\ngroupingAttributes = "{groupingAttributes}"\nfVect = "{fVect}"\npredicates = "{predicates}"\nhavingCondition = "{havingCondition}"\n""") #write input variables to file
+    algorithmFile.write("MF_Struct = {}\n") #initalize empty MF Struct
     algorithmFile.write("db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)\n\n")
-    algorithmFile.write("query = db.prepare('SELECT * FROM sales;')\n")
+    algorithmFile.write("query = db.prepare('SELECT * FROM sales;')\n") #connect to DB and query sales table to loop through row by row during evaluation of MF Struct
+    
+    #after initalizing the file, the groupingVarCount, and predicates are examined to determine which algorithm to use: 
     mf = 1 #flag to tell if a query is an MF Query
     if groupingVarCount == '0': #If no grouping variables, evaluate as a regular SQL Query
         mf = 0 #set flag to 0 as the query is not an MF Query
@@ -107,7 +109,7 @@ with open('algorithm.py', 'w') as algorithmFile: # opens file to write algorithm
         algorithmFile.close() #close file before passing to sqlQuery function
         sqlQuery() #calls sqlQuery function which will write the appropriate algorithm to the algorithm.py file
     
-    for pred in predicates.split(','): #loop through the list of predicate statments to determine if the query is an MF or EMF Query
+    for pred in predicates.split(','): #loop through the list of predicate statments to see if there is a grouping attribute referenced that is not attributed to a grouping variable
         if(mf): #if the query has not been found to be a EMF or SQL Query, continue checking
             for string in pred.split(' '): #for each element of the predicate statment,
                 if(string in groupingAttributes.split(',')): #if there is a grouping attribute in the predicate statment, the query is an EMF Query
@@ -116,8 +118,8 @@ with open('algorithm.py', 'w') as algorithmFile: # opens file to write algorithm
                     algorithmFile.close()
                     emfQuery() #calls emfQuery function to write the appropriate algorithm to the algorithm.py file
                     break #if the query is an EMF Query, break out of the loop
-        else: #break out of the loop if the query was found to be an SQL or EMF Query
-            break 
+        else: 
+            break #break out of the loop if the query was found to be an SQL or EMF Query
     if(mf): # If query isn't a basic SQL query or an EMF query, evaluate as an MF Query
         algorithmFile.write("\n\n# Algorithm for MF Query:\n")
         algorithmFile.close()

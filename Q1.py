@@ -16,43 +16,40 @@ query = db.prepare('SELECT * FROM sales;')
 
 # Algorithm for basic SQL Query:
 for row in query:
-	key = '' #key to store into the MF Struct
-	value = {} #value that will store the columns of the MF Struct for the given row
-	for attr in groupingAttributes.split(','): #create key out of the grouping attributes of the current row in the table
+	key = ''
+	value = {}
+	for attr in groupingAttributes.split(','):
 		key += f'{str(row[attr])},'
-	key = key[:-1] #remove trailing comma
-	if key not in MF_Struct.keys(): #if the key is not in the MF Struct, create a new entry for the MF Struct
+	key = key[:-1]
+	if key not in MF_Struct.keys():
 		for groupAttr in groupingAttributes.split(','):
 			colVal = row[groupAttr]
 			if colVal:
 				value[groupAttr] = colVal
-		#loop through the fVects and initalize the values for each aggreagte function being calculated
-	    #initalize count to 1, sum to the current row's quant value, min and max to the current row's quant value, and average to a dictionary with 3 componenets
 		for fVectAttr in fVect.split(','):
 			tableCol = fVectAttr.split('_')[1]
-			if (fVectAttr.split('_')[0] == 'avg'): 
-				#average is stored as a dictionary tracking, sum, count, and average. Each is calculated and stored when the row is updated
+			if (fVectAttr.split('_')[0] == 'avg'):
 				value[fVectAttr] = {'sum': row[tableCol], 'count': 1, 'avg': row[tableCol]}
 			elif (fVectAttr.split('_')[0] == 'count'):
 				value[fVectAttr] = 1
 			else:
 				value[fVectAttr] = row[tableCol]
-		MF_Struct[key] = value #insert new row into the MFStruct
-	else: #row in table already corresponds to an existing entry in the MF Struct, update the existing entry
+		MF_Struct[key] = value
+	else:
 		for fVectAttr in fVect.split(','):
 			tableCol = fVectAttr.split('_')[1]
 			if (fVectAttr.split('_')[0] == 'sum'):
-				MF_Struct[key][fVectAttr] += int(row[tableCol]) #Add the quant to the sum for the corresponding row in the MF Struct
+				MF_Struct[key][fVectAttr] += int(row[tableCol])
 			elif (fVectAttr.split('_')[0] == 'avg'):
 				newSum = MF_Struct[key][fVectAttr]['sum'] + int(row[tableCol])
 				newCount = MF_Struct[key][fVectAttr]['count'] + 1
 				MF_Struct[key][fVectAttr] = {'sum': newSum, 'count': newCount, 'avg': newSum / newCount}
 			elif (fVectAttr.split('_')[0] == 'count'):
 				MF_Struct[key][fVectAttr] += 1
-			elif (fVectAttr.split('_')[0] == 'min'): #check if the row's quant is a new min compared to the corresponding row of the MFStruct
+			elif (fVectAttr.split('_')[0] == 'min'):
 				if row[tableCol] < MF_Struct[key][fVectAttr]:
 					MF_Struct[key][fVectAttr] = int(row[tableCol])
-			else: #check if the row's quant is a new max compared to the corresponding row of the MFStruct
+			else:
 				if row[tableCol] > MF_Struct[key][fVectAttr]:
 					MF_Struct[key][fVectAttr] = int(row[tableCol])
 #Generate output table(also checks the HAVING condition)

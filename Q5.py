@@ -1,11 +1,25 @@
-function = """predicates = predicates.split(',')
+import postgresql
+from databaseConfig import dbConfig
+from prettytable import PrettyTable
+
+selectAttributes = "prod,year,1_sum_quant,2_avg_quant"
+groupingVarCount = 2
+groupingAttributes = "prod,year"
+fVect = "1_sum_quant,2_avg_quant"
+predicates = "1.prod = prod and 1.year = year,2.prod = prod"
+havingCondition = "1_sum_quant > 0.25 * 2_avg_quant"
+MF_Struct = {}
+db = postgresql.open(user = dbConfig['user'],password = dbConfig['password'],host = dbConfig['host'],port = dbConfig['port'],database = dbConfig['database'],)
+
+query = db.prepare('SELECT * FROM sales;')
+
+
+# Algorithm for EMF Query:
+predicates = predicates.split(',')
 pList = []
-#splits predicates by each predicate statment and creates list to store the parts of each predicate in a single 2D array
 for i in predicates:
 	pList.append(i.split(' '))
-for i in range(int(groupingVarCount)+1): # loop through the table to evaluate each grouping variable
-    # 0th pass of the algorithm, where each row of the MF Struct is initalized for every unique group based on the grouping variables.
-    # Each row in the MF struct also has its columns initalized appropriately based on the aggregates in the F-Vect
+for i in range(int(groupingVarCount)+1):
 	if i == 0:
 		for row in query:
 			key = ''
@@ -20,31 +34,22 @@ for i in range(int(groupingVarCount)+1): # loop through the table to evaluate ea
 						value[groupAttr] = colVal
 				for fVectAttr in fVect.split(','):
 					if (fVectAttr.split('_')[1] == 'avg'):
-                        # Average is saved as an object with the sum, count, and overall average
 						value[fVectAttr] = {'sum':0, 'count':0, 'avg':0}
 					elif (fVectAttr.split('_')[1] == 'min'):
-                        # Min is initialized as 4994, which is the largest value of 'quant' in the sales table.
-                        # This allows the first value that the algorithm comes across will be saved as the min (except the row with quant=4994)
-						value[fVectAttr] = 4994 # Max quant in sales table
+						value[fVectAttr] = 4994
 					else:
-                        # Initalize values of count, sum and max to 0
 						value[fVectAttr] = 0
-				MF_Struct[key] = value #add row into MF Struct
-	else: #The other n passes for each grouping variable 
-			for aggregate in fVect.split(','):
-				aggList = aggregate.split('_')
-				groupVar = aggList[0]
-				aggFunc = aggList[1]
-				aggCol = aggList[2]
-                # Check to make sure the aggregate function is being called on the grouping variable you are currently on (i)
-				if i == int(groupVar):
-					for row in query:
-						key = ''
-						for attr in groupingAttributes.split(','):
-							key += f'{str(row[attr])},'
-						key = key[:-1]
+				MF_Struct[key] = value
+	else:
+		for aggregate in fVect.split(','):
+			aggList = aggregate.split('_')
+			groupVar = aggList[0]
+			aggFunc = aggList[1]
+			aggCol = aggList[2]
+			if i == int(groupVar):
+				for row in query:
+					for key in MF_Struct.keys():
 						if aggFunc == 'sum':
-                            # Creates a string to be run with the eval() method by replacing grouping variables with their actual values
 							evalString = predicates[i-1]
 							for string in pList[i-1]:
 								if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
@@ -54,7 +59,13 @@ for i in range(int(groupingVarCount)+1): # loop through the table to evaluate ea
 										evalString = evalString.replace(string, str(rowVal))
 									except:
 										evalString = evalString.replace(string, f"'{rowVal}'")
-                            # If evalString is true, update the sum
+								elif string in groupingAttributes.split(','):
+									rowVal = MF_Struct[key][string]
+									try:
+										int(rowVal)
+										evalString = evalString.replace(string, str(rowVal))
+									except:
+										evalString = evalString.replace(string, f"'{rowVal}'")
 							if eval(evalString.replace('=', '==')):
 								sum = int(row[aggCol])
 								MF_Struct[key][aggregate] += sum
@@ -70,14 +81,19 @@ for i in range(int(groupingVarCount)+1): # loop through the table to evaluate ea
 										evalString = evalString.replace(string, str(rowVal))
 									except:
 										evalString = evalString.replace(string, f"'{rowVal}'")
-                            # If evalString is true and count isn't 0, update the avg
+								elif string in groupingAttributes.split(','):
+									rowVal = MF_Struct[key][string]
+									try:
+										int(rowVal)
+										evalString = evalString.replace(string, str(rowVal))
+									except:
+										evalString = evalString.replace(string, f"'{rowVal}'")
 							if eval(evalString.replace('=', '==')):
 								sum += int(row[aggCol])
 								count += 1
 								if count != 0:
 									MF_Struct[key][aggregate] = {'sum': sum, 'count': count, 'avg': (sum/count)}
 						elif aggFunc == 'min':
-							# check if row meets predicate requirements
 							evalString = predicates[i-1]
 							for string in pList[i-1]:
 								if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
@@ -87,29 +103,39 @@ for i in range(int(groupingVarCount)+1): # loop through the table to evaluate ea
 										evalString = evalString.replace(string, str(rowVal))
 									except:
 										evalString = evalString.replace(string, f"'{rowVal}'")
-                            # If evalString is true, update the min
+								elif string in groupingAttributes.split(','):
+									rowVal = MF_Struct[key][string]
+									try:
+										int(rowVal)
+										evalString = evalString.replace(string, str(rowVal))
+									except:
+										evalString = evalString.replace(string, f"'{rowVal}'")
 							if eval(evalString.replace('=', '==')):
 								min = int(MF_Struct[key][aggregate])
 								if int(row[aggCol]) < min:
 									MF_Struct[key][aggregate] = row[aggCol]
 						elif aggFunc == 'max':
-							# check if row meets predicate requirements
 							evalString = predicates[i-1]
 							for string in pList[i-1]:
 								if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
 									rowVal = row[string.split('.')[1]]
 									try:
 										int(rowVal)
-										evalString = evalString.replace(string, str(rowVal))
+										valString = evalString.replace(string, str(rowVal))
 									except:
 										evalString = evalString.replace(string, f"'{rowVal}'")
-                            # If evalString is true, update the max
+								elif string in groupingAttributes.split(','):
+									rowVal = MF_Struct[key][string]
+									try:
+										int(rowVal)
+										valString = evalString.replace(string, str(rowVal))
+									except:
+										evalString = evalString.replace(string, f"'{rowVal}'")
 							if eval(evalString.replace('=', '==')):
 								max = int(MF_Struct[key][aggregate])
 								if int(row[aggCol]) > max:
 									MF_Struct[key][aggregate] = row[aggCol]
 						elif aggFunc == 'count':
-							# check if row meets predicate requirements
 							evalString = predicates[i-1]
 							for string in pList[i-1]:
 								if len(string.split('.')) > 1 and string.split('.')[0] == str(i):
@@ -119,21 +145,24 @@ for i in range(int(groupingVarCount)+1): # loop through the table to evaluate ea
 										evalString = evalString.replace(string, str(rowVal))
 									except:
 										evalString = evalString.replace(string, f"'{rowVal}'")
-							if eval(evalString.replace('=', '==')): # If evalString is true, increment the count
+								elif string in groupingAttributes.split(','):
+									rowVal = MF_Struct[key][string]
+									try:
+										int(rowVal)
+										evalString = evalString.replace(string, str(rowVal))
+									except:
+										evalString = evalString.replace(string, f"'{rowVal}'")
+							if eval(evalString.replace('=', '==')):
 								MF_Struct[key][aggregate] += 1
-#Generate output table(also checks the HAVING condition)
 output = PrettyTable()
 output.field_names = selectAttributes.split(',')
 for row in MF_Struct:
 	evalString = ''
 	if havingCondition != '':
-        #if there is a having condition, loop through each element of the having condition to fill in the correct information into the evalString
-        #the eval string will be equal to the having condition, replaced with the values of the variables in question,
-        # then evaluated to check if the row of the MFStruct being examined is to be included in the output table
 		for string in havingCondition.split(' '):
 			if string not in ['>', '<', '==', '<=', '>=', 'and', 'or', 'not', '*', '/', '+', '-']:
 				try:
-					int(string)
+					float(string)
 					evalString += string
 				except:
 					if len(string.split('_')) > 1 and string.split('_')[1] == 'avg':
@@ -152,7 +181,6 @@ for row in MF_Struct:
 			output.add_row(row_info)
 		evalString = ''
 	else:
-        #there is no having condition, thus every MFStruct row will be in the output table
 		row_info = []
 		for val in selectAttributes.split(','):
 			if len(val.split('_')) > 1 and val.split('_')[1] == 'avg':
@@ -160,8 +188,4 @@ for row in MF_Struct:
 			else:
 				row_info += [str(MF_Struct[row][val])]
 		output.add_row(row_info)
-print(output) #Pretty table corresponding to evaluation of query"""
-def mfQuery():
-    with open('algorithm.py', 'a') as algorithmFile:
-        algorithmFile.write(function)
-        algorithmFile.close()
+print(output)

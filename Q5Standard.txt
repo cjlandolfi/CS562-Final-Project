@@ -10,7 +10,7 @@ CREATE VIEW Q2 as
 
 SELECT prod, year, Q1.sum, Q2.avg
 FROM Q1, Q2
-GROUP BY prod, year
+GROUP BY prod
 HAVING Q1.sum > 0.25 * avg(2.quant)
 
 EMF:

@@ -125,7 +125,3 @@ with open('algorithm.py', 'w') as algorithmFile: # opens file to write algorithm
         algorithmFile.close()
         mfQuery() #calls mfQuery function to write the appropriate algorithm to the algorithm.py file
 db.close()
-
-#TODO
-#   Presentation
-#   Test

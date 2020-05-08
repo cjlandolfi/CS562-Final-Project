@@ -1,9 +1,11 @@
 def mfQuery():
     with open("algorithm.py", 'a') as algorithmFile:
+        #splits predicates by each predicate statment and creates list to store the parts of each predicate in a single 2D array
         algorithmFile.write("""predicates = predicates.split(',')\npList = []\n""")
         algorithmFile.write("""for i in predicates:\n\tpList.append(i.split(' '))\n""")
         algorithmFile.write("""for i in range(int(groupingVarCount)+1):\n\t\n""")
-        # Initialization occurs in the 0th pass of the algorithm
+        # 0th pass of the algorithm, where each row of the MF Struct is initalized for every unique group based on the grouping variables.
+        # Each row in the MF struct also has its columns initalized appropriately based on the aggregates in the F-Vect
         algorithmFile.write("""\tif i == 0:\n\t\tfor row in query:\n\t\t\tkey = ''\n\t\t\tvalue = {}\n""")
         algorithmFile.write("""\t\t\tfor attr in groupingAttributes.split(','):\n\t\t\t\tkey += f'{str(row[attr])},'\n""")
         algorithmFile.write("""\t\t\tkey = key[:-1]\n\t\t\tif key not in MF_Struct.keys():\n""")
@@ -63,8 +65,8 @@ def mfQuery():
 
         #Generate output table(also checks the HAVING condition)
         algorithmFile.write("""output = PrettyTable()\noutput.field_names = selectAttributes.split(',')\nfor row in MF_Struct:\n""")
-        algorithmFile.write("""\tevalString = ''\n\tif havingCondition != '':\n""") #create an evalString to be used to check each having condition
-
+        #create an evalString to be used to check each having condition
+        algorithmFile.write("""\tevalString = ''\n\tif havingCondition != '':\n""")
         #if there is a having condition, loop through each element of the having condition to fill in the correct information into the evalString
         #the eval string will be equal to the having condition, replaced with the values of the variables in question, 
         #then evaluated to check if the row of the MFStruct being examined is to be included in the output table
@@ -79,7 +81,7 @@ def mfQuery():
         algorithmFile.write("""\t\t\t\telse:\n\t\t\t\t\trow_info += [str(MF_Struct[row][val])]\n""")
         algorithmFile.write("""\t\t\toutput.add_row(row_info)\n\t\tevalString = '' #clear eval string after execution\n""")
 
-        #there is no having condition, thus every MFStruct row will be in the output table
+        #there is no having condition, thus every MFStruct row will added to the output table
         algorithmFile.write("""\telse:\n\t\trow_info = []\n\t\tfor val in selectAttributes.split(','):\n""")
         algorithmFile.write("""\t\t\tif len(val.split('_')) > 1 and val.split('_')[1] == 'avg':\n\t\t\t\trow_info += [str(MF_Struct[row][val]['avg'])]\n""")
         algorithmFile.write("""\t\t\telse:\n\t\t\t\trow_info += [str(MF_Struct[row][val])]\n""")

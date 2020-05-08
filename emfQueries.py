@@ -1,8 +1,10 @@
 def emfQuery():
     with open("algorithm.py", 'a') as algorithmFile:
-        algorithmFile.write("""predicates = predicates.split(',')\npList = []\nfor i in predicates:\n\tpList.append(i.split(' '))\n""") #splits predicates by each predicate statment and creates list to store the parts of each predicate in a single 2D array
+        #splits predicates by each predicate statment and creates list to store the parts of each predicate in a single 2D array
+        algorithmFile.write("""predicates = predicates.split(',')\npList = []\nfor i in predicates:\n\tpList.append(i.split(' '))\n""") 
         algorithmFile.write("""for i in range(int(groupingVarCount)+1):\n""")
-        # Initialization occurs in the 0th pass of the algorithm
+        # 0th pass of the algorithm, where each row of the MF Struct is initalized for every unique group based on the grouping variables.
+        # Each row in the MF struct also has its columns initalized appropriately based on the aggregates in the F-Vect
         algorithmFile.write("""\tif i == 0:\n\t\tfor row in query:\n\t\t\tkey = ''\n\t\t\tvalue = {}\n""")
         algorithmFile.write("""\t\t\tfor attr in groupingAttributes.split(','):\n\t\t\t\tkey += f'{str(row[attr])},'\n""")
         algorithmFile.write("""\t\t\tkey = key[:-1]\n\t\t\tif key not in MF_Struct.keys():\n""")
@@ -18,11 +20,11 @@ def emfQuery():
         # Begin n passes for each of the n grouping variables
         algorithmFile.write("""\telse:\n\t\tfor aggregate in fVect.split(','):\n\t\t\taggList = aggregate.split('_')\n\t\t\tgroupVar = aggList[0]\n\t\t\taggFunc = aggList[1]\n\t\t\taggCol = aggList[2]\n""")
         # Check to make sure the aggregate function is being called on the grouping variable you are currently on (i)
-        # Also loop through every key in the MF_Struct to see if statements like '1.state = state' applies to it
+        # Also loop through every key in the MF_Struct to update every row of the MF_Struct the predicate statments apply to(1.state = state and 1.cust = cust vs 1.state = state)
         algorithmFile.write("""\t\t\tif i == int(groupVar):\n\t\t\t\tfor row in query:\n\t\t\t\t\tfor key in MF_Struct.keys():\n""")
         algorithmFile.write("""\t\t\t\t\t\tif aggFunc == 'sum':\n\t\t\t\t\t\t\tevalString = predicates[i-1]\n""")
         # Creates a string to be run with the eval() method by replacing grouping variables with their actual values
-        # Since it's an EMF query, it must also check if the string is a grouping variable and replace that with the actual value as well
+        # Since it's an EMF query, it must also check if the string is a grouping variable and replace that with the actual value from the table row as well
         algorithmFile.write("""\t\t\t\t\t\t\tfor string in pList[i-1]:\n\t\t\t\t\t\t\t\tif len(string.split('.')) > 1 and string.split('.')[0] == str(i):\n\t\t\t\t\t\t\t\t\trowVal = row[string.split('.')[1]]\n""")
         algorithmFile.write("""\t\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\t\tint(rowVal)\n\t\t\t\t\t\t\t\t\t\tevalString = evalString.replace(string, str(rowVal))\n""")
         algorithmFile.write("""\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\tevalString = evalString.replace(string, f"'{rowVal}'")\n""")
@@ -38,7 +40,7 @@ def emfQuery():
         algorithmFile.write("""\t\t\t\t\t\t\t\telif string in groupingAttributes.split(','):\n\t\t\t\t\t\t\t\t\trowVal = MF_Struct[key][string]\n""")
         algorithmFile.write("""\t\t\t\t\t\t\t\t\ttry:\n\t\t\t\t\t\t\t\t\t\tint(rowVal)\n\t\t\t\t\t\t\t\t\t\tevalString = evalString.replace(string, str(rowVal))\n""")
         algorithmFile.write("""\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\tevalString = evalString.replace(string, f"'{rowVal}'")\n""")
-        # If evalString is true, update the avg
+        # If evalString is true and the count isn't 0, update the avg
         algorithmFile.write("""\t\t\t\t\t\t\tif eval(evalString.replace('=', '==')):\n\t\t\t\t\t\t\t\tsum += int(row[aggCol])\n\t\t\t\t\t\t\t\tcount += 1\n\t\t\t\t\t\t\t\tif count != 0:\n""")
         algorithmFile.write("""\t\t\t\t\t\t\t\t\tMF_Struct[key][aggregate] = {'sum': sum, 'count': count, 'avg': (sum/count)}\n""")
         algorithmFile.write("""\t\t\t\t\t\telif aggFunc == 'min':\n\t\t\t\t\t\t\tevalString = predicates[i-1]\n\t\t\t\t\t\t\tfor string in pList[i-1]:\n\t\t\t\t\t\t\t\tif len(string.split('.')) > 1 and string.split('.')[0] == str(i):\n""")                
@@ -68,10 +70,12 @@ def emfQuery():
         algorithmFile.write("""\t\t\t\t\t\t\t\t\texcept:\n\t\t\t\t\t\t\t\t\t\tevalString = evalString.replace(string, f"'{rowVal}'")\n""")
         # If evalString is true, increment the count
         algorithmFile.write("""\t\t\t\t\t\t\tif eval(evalString.replace('=', '==')):\n\t\t\t\t\t\t\t\tMF_Struct[key][aggregate] += 1\n""")
-        #output/having clause
+
+
+        #Generate output table(also checks the HAVING condition)
         algorithmFile.write("""output = PrettyTable()\noutput.field_names = selectAttributes.split(',')\nfor row in MF_Struct:\n""")
-        algorithmFile.write("""\tevalString = ''\n\tif havingCondition != '':\n""") #create an evalString to be used to check each having condition
-        
+        #create an evalString to be used to check each having condition
+        algorithmFile.write("""\tevalString = ''\n\tif havingCondition != '':\n""") 
         #if there is a having condition, loop through each element of the having condition to fill in the correct information into the evalString
         #the eval string will be equal to the having condition, replaced with the values of the variables in question, 
         #then evaluated to check if the row of the MFStruct being examined is to be included in the output table
@@ -86,7 +90,7 @@ def emfQuery():
         algorithmFile.write("""\t\t\t\telse:\n\t\t\t\t\trow_info += [str(MF_Struct[row][val])]\n""")
         algorithmFile.write("""\t\t\toutput.add_row(row_info)\n\t\tevalString = ''\n""")
 
-        #there is no having condition, thus every MFStruct row will be in the output table
+        #there is no having condition, thus every MFStruct row will be added to the output table
         algorithmFile.write("""\telse:\n\t\trow_info = []\n\t\tfor val in selectAttributes.split(','):\n""")
         algorithmFile.write("""\t\t\tif len(val.split('_')) > 1 and val.split('_')[1] == 'avg':\n\t\t\t\trow_info += [str(MF_Struct[row][val]['avg'])]\n""")
         algorithmFile.write("""\t\t\telse:\n\t\t\t\trow_info += [str(MF_Struct[row][val])]\n""")
